@@ -6,6 +6,12 @@ user_invocable: true
 
 # scad-forge: OpenSCAD + 3D Preview Generator
 
+## Flags
+
+- **`--verbose`** (default: **on**) — Narrate each self-evaluation pass: show the screenshot, explain what looks wrong, and describe the fix before re-generating. Pass `--quiet` to suppress iteration narration and only present the final result.
+
+---
+
 Produce two deliverables from a description of a physical object:
 
 1. **`<name>.scad`** — A parametric OpenSCAD file ready for rendering/export/printing
@@ -162,26 +168,78 @@ This renders them as transparent red wireframe overlays so the user can see what
 
 ---
 
-## Phase 4: Open the Preview
+## Phase 4: Screenshot & Self-Evaluation Loop
 
-After generating both files, run the previewer:
+After generating both files, capture a screenshot of the 3D preview and self-evaluate.
+Repeat up to 3 times if issues are found.
+
+**Verbose mode (default):** Show the user each screenshot, explain what looks wrong, and describe
+the fix before re-generating. This is the default behavior unless the user passes `--quiet`.
+
+**Quiet mode (`--quiet`):** Do not narrate self-correction passes to the user — only present
+the final validated result.
+
+### Step 1: Ensure previewer is running
+
+If not already started in this session, run in the background:
 
 ```bash
 cd previewer && npm run dev
 ```
 
-Then open the preview in the browser. The previewer watches for manifest files in `../output/`.
+The previewer persists across iterations — no need to restart.
+
+### Step 2: Capture screenshot
+
+Use Playwright to screenshot the rendered preview:
+
+```bash
+playwright screenshot \
+  --wait-for-selector 'canvas[data-render-ready="true"]' \
+  --wait-for-timeout 2000 \
+  --viewport-size "1280,720" \
+  "http://localhost:3000?manifest=<name>_manifest.json" \
+  ./output/<name>_preview.png
+```
+
+Replace `<name>` with the actual filename stem.
+
+### Step 3: View and evaluate
+
+Use the Read tool to view `./output/<name>_preview.png`.
+
+Evaluate the screenshot against the user's requirements. Check for:
+- **Shape correctness** — Does the overall shape match what was requested?
+- **Proportions** — Do the relative sizes of parts look right?
+- **Completeness** — Are all requested features visible (holes, slots, fillets, etc.)?
+- **Positioning** — Are parts correctly positioned relative to each other?
+- **Obvious errors** — Overlapping geometry, missing parts, parts floating in space, etc.
+
+### Step 4: Iterate or proceed
+
+If issues are found AND iteration count < 3:
+1. Identify what needs to change in the manifest (and .scad if needed)
+2. Regenerate the affected file(s)
+3. Return to Step 2
+
+If the preview looks correct OR iteration limit reached, proceed to Phase 5.
+
+### Troubleshooting:
+- **Screenshot shows empty state ("No manifest loaded"):** Verify the manifest file exists and the filename in the URL matches exactly.
+- **Connection refused:** The previewer isn't running. Start it and retry.
+- **Canvas never becomes ready:** Fall back to `--wait-for-timeout 5000` without the selector.
 
 ---
 
-## Phase 5: Explain and Iterate
+## Phase 5: Present to User
 
-After generating, give a brief summary:
+After self-validation, present the result:
 
 1. **What you built** — One sentence.
-2. **Key parameters** — Top 3–5 parameters the user is most likely to tweak.
-3. **Simplifications** — Any CSG operations approximated in the preview.
-4. **Print notes** — If 3D printing: overhangs, thin walls, orientation suggestions.
+2. **Preview** — Note that a 3D preview is running at localhost:3000.
+3. **Key parameters** — Top 3–5 parameters the user is most likely to tweak.
+4. **Simplifications** — Any CSG operations approximated in the preview.
+5. **Print notes** — If 3D printing: overhangs, thin walls, orientation suggestions.
 
 To iterate: the user can ask to change dimensions or add features. Regenerate both files on each
-iteration — they must stay in sync.
+iteration — they must stay in sync. Re-run the screenshot self-evaluation loop after each change.

@@ -230,7 +230,7 @@ function loadManifestList() {
       const params = new URLSearchParams(window.location.search);
       const manifestParam = params.get('manifest');
       if (manifestParam) {
-        const match = files.find(f => manifestParam.includes(f));
+        const match = files.find(f => f === manifestParam || f.includes(manifestParam) || manifestParam.includes(f));
         if (match) {
           select.value = match;
           fetchAndLoadManifest(match);
@@ -285,6 +285,9 @@ function onDrop(e) {
 function loadManifest(data) {
   manifest = data;
 
+  // Reset render-ready flag (for screenshot automation)
+  document.getElementById('viewport').removeAttribute('data-render-ready');
+
   // Clear existing model
   while (modelGroup.children.length > 0) {
     const child = modelGroup.children[0];
@@ -313,6 +316,11 @@ function loadManifest(data) {
 
   // Update grid to match model scale
   updateGrid();
+
+  // Signal render-ready after next frame (for screenshot automation)
+  requestAnimationFrame(() => {
+    document.getElementById('viewport').setAttribute('data-render-ready', 'true');
+  });
 }
 
 function createPartMesh(part) {
