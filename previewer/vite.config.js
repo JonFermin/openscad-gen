@@ -43,6 +43,8 @@ export default defineConfig({
   server: {
     open: true,
     port: 3000,
+    host: true,
+    allowedHosts: process.env.VITE_ALLOWED_HOST ? [process.env.VITE_ALLOWED_HOST] : [],
   },
   plugins: [manifestListPlugin()],
 });
