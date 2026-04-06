@@ -116,7 +116,7 @@ def generate_uv(obj):
 
 def apply_default_material(obj):
     """Apply a basic material so glTF export includes material data."""
-    mat = bpy.data.materials.new(name="ScadForgeMaterial")
+    mat = bpy.data.materials.new(name="CadsmithMaterial")
     mat.use_nodes = True
     bsdf = mat.node_tree.nodes.get("Principled BSDF")
     if bsdf:

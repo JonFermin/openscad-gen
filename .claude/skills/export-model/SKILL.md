@@ -1,12 +1,14 @@
 ---
 name: export-model
-description: Export generated .scad models to STL, OBJ, glTF, or GLB via the OpenSCAD + Blender pipeline
+description: Export generated 3D models (.stl, .step, .py) to STL, OBJ, glTF, or GLB via the Blender pipeline
 user_invocable: true
 ---
 
 # export-model: Model Export Pipeline
 
-Export a `.scad` file from `./output/` to a mesh format suitable for game engines, 3D printing, or other tools.
+Export a model from `./output/` to a mesh format suitable for game engines, 3D printing, or other tools.
+
+Accepts `.stl`, `.step`, or `.py` (build123d) input files.
 
 ---
 
@@ -16,7 +18,7 @@ Export a `.scad` file from `./output/` to a mesh format suitable for game engine
 /export-model <name> [options]
 ```
 
-Where `<name>` is the stem of a `.scad` file in `./output/` (e.g. `bracket` for `output/bracket.scad`).
+Where `<name>` matches a file in `./output/` (e.g. `bracket` for `output/bracket.stl` or `output/bracket.py`).
 
 ---
 
@@ -29,7 +31,6 @@ Where `<name>` is the stem of a `.scad` file in `./output/` (e.g. `bracket` for 
 | `-u`, `--uv` | Generate UV maps in Blender | off |
 | `-b`, `--blender` | Force Blender cleanup (auto for glb/gltf) | auto |
 | `--no-blender` | Skip Blender even for glb/gltf | off |
-| `-p`, `--params` | OpenSCAD parameter overrides `"KEY=VAL"` (repeatable) | — |
 
 ---
 
@@ -37,7 +38,8 @@ Where `<name>` is the stem of a `.scad` file in `./output/` (e.g. `bracket` for 
 
 ### Step 1: Identify the model
 
-Look in `./output/` for the `.scad` file matching the user's request. If ambiguous, list available `.scad` files and ask the user to pick.
+Look in `./output/` for files matching the user's request. Priority order: `.stl` > `.step` > `.py`.
+If ambiguous, list available files and ask the user to pick.
 
 ### Step 2: Confirm export settings
 
@@ -52,16 +54,21 @@ Default to GLB if the user just says "export it."
 Execute the export script:
 
 ```bash
-./pipeline/scad-to-godot.sh output/<name>.scad -f <format> [options]
+./pipeline/scad-to-godot.sh output/<name>.<ext> -f <format> [options]
 ```
+
+The script handles input type detection automatically:
+- **`.stl`** — Used directly as mesh input
+- **`.step`** — Converted to STL via Python (build123d/OCP)
+- **`.py`** — Executed to generate STL, then processed
 
 ### Prerequisites
 
 The pipeline requires:
-- **OpenSCAD** CLI — for `.scad` → STL conversion
-- **Blender 3.x+** CLI — for mesh cleanup, decimation, UV generation, and glTF/GLB export
+- **Blender 3.x+** CLI — for mesh cleanup, decimation, UV generation, and glTF/GLB/OBJ export
+- **Python with build123d** — only if exporting from `.py` or `.step` files
 
-If either tool is missing, tell the user what to install and provide the download link.
+If Blender is missing, tell the user what to install and provide the download link.
 
 ### Step 4: Verify output
 
@@ -92,9 +99,9 @@ Based on the format, provide concise import guidance:
 
 ## Pipeline Details
 
-The export pipeline (`pipeline/scad-to-godot.sh`) runs two stages:
+The export pipeline (`pipeline/scad-to-godot.sh`) runs up to two stages:
 
-1. **OpenSCAD → STL** — Renders the parametric `.scad` to a triangle mesh
+1. **Input → STL** — If input is `.py`, runs the script to generate STL. If `.step`, converts via Python. If `.stl`, uses directly.
 2. **Blender processing** (optional/auto for glb/gltf) — Cleans mesh, decimates, generates UVs, applies default material, centers origin, exports to target format
 
 The Blender script (`pipeline/blender_process.py`) handles:
@@ -111,15 +118,15 @@ The Blender script (`pipeline/blender_process.py`) handles:
 ## Examples
 
 ```bash
-# Basic GLB export for Godot
-./pipeline/scad-to-godot.sh output/bracket.scad
+# Basic GLB export for Godot (from STL)
+./pipeline/scad-to-godot.sh output/bracket.stl
 
-# STL for 3D printing
-./pipeline/scad-to-godot.sh output/bracket.scad -f stl
+# Run build123d script and export to GLB
+./pipeline/scad-to-godot.sh output/bracket.py -f glb
 
 # glTF with decimation and UVs
-./pipeline/scad-to-godot.sh output/bracket.scad -f gltf -d 0.5 -u
+./pipeline/scad-to-godot.sh output/bracket.stl -f gltf -d 0.5 -u
 
-# Override OpenSCAD parameters at export time
-./pipeline/scad-to-godot.sh output/bracket.scad -p 'wall_thickness=3' -p 'height=50'
+# STL for 3D printing (no Blender needed)
+./pipeline/scad-to-godot.sh output/bracket.stl -f stl
 ```

@@ -1,5 +1,7 @@
 .DS_Store
 output/*.scad
+output/*.py
+output/*.step
 output/*.stl
 output/*.obj
 output/*.glb
@@ -11,3 +13,5 @@ output/*.png
 node_modules/
 dist/
 .env
+.playwright-mcp/
+.claude/settings.local.json

@@ -1,6 +1,6 @@
-# scad-forge Previewer
+# cadsmith Previewer
 
-Interactive Three.js 3D previewer for scad-forge scene manifests.
+Interactive Three.js 3D previewer for cadsmith scene manifests.
 
 ## Setup
 
@@ -82,4 +82,4 @@ Parts with `"operation": "difference"` render as transparent red wireframes to i
 
 ### Coordinate system
 
-The previewer uses Three.js Y-up coordinates. When the scad-forge skill generates manifests from OpenSCAD (Z-up), it swaps Y/Z automatically.
+The previewer uses Three.js Y-up coordinates. When cadsmith generates manifests from build123d (Z-up), it swaps Y/Z automatically.

@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
-# scad-to-godot.sh — Export OpenSCAD models for Godot import
+# scad-to-godot.sh — Export 3D models for game engines / 3D printing
 #
 # Usage:
-#   ./pipeline/scad-to-godot.sh <input.scad> [options]
+#   ./pipeline/scad-to-godot.sh <input> [options]
+#
+# Accepts .stl, .step, or .py (build123d) input files.
 #
 # Options:
 #   -o, --output-dir DIR     Output directory (default: ./output)
@@ -10,19 +12,17 @@
 #   -b, --blender            Run Blender cleanup (auto-enabled for glb/gltf)
 #   -d, --decimate RATIO     Blender decimate ratio 0.0-1.0 (default: 1.0 = no reduction)
 #   -u, --uv                 Generate UV maps in Blender
-#   -p, --params "KEY=VAL"   OpenSCAD parameter overrides (repeatable)
 #   --no-blender             Skip Blender even for glb/gltf (just convert)
 #   -h, --help               Show this help
 #
 # Prerequisites:
-#   - OpenSCAD (openscad CLI)
-#   - Blender 3.x+ (blender CLI) — only needed for --blender or glb/gltf output
+#   - Blender 3.x+ (blender CLI) — needed for glb/gltf output or mesh cleanup
+#   - Python with build123d — only if passing a .py file
 #
 # Examples:
-#   ./pipeline/scad-to-godot.sh output/my_model.scad
-#   ./pipeline/scad-to-godot.sh output/my_model.scad -f gltf -d 0.5 -u
-#   ./pipeline/scad-to-godot.sh output/my_model.scad -f stl
-#   ./pipeline/scad-to-godot.sh output/my_model.scad -p 'wall_thickness=3' -p 'height=50'
+#   ./pipeline/scad-to-godot.sh output/my_model.stl
+#   ./pipeline/scad-to-godot.sh output/my_model.stl -f gltf -d 0.5 -u
+#   ./pipeline/scad-to-godot.sh output/my_model.py -f glb
 
 set -euo pipefail
 
@@ -36,16 +36,15 @@ USE_BLENDER=""
 DECIMATE_RATIO="1.0"
 GENERATE_UV="false"
 NO_BLENDER=""
-SCAD_PARAMS=()
 INPUT_FILE=""
 
 usage() {
-    sed -n '3,17p' "$0" | sed 's/^# \?//'
+    sed -n '3,20p' "$0" | sed 's/^# \?//'
     exit 0
 }
 
-log() { echo "[scad-to-godot] $*"; }
-err() { echo "[scad-to-godot] ERROR: $*" >&2; exit 1; }
+log() { echo "[export] $*"; }
+err() { echo "[export] ERROR: $*" >&2; exit 1; }
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -55,7 +54,6 @@ while [[ $# -gt 0 ]]; do
         -b|--blender)    USE_BLENDER="true"; shift ;;
         -d|--decimate)   DECIMATE_RATIO="$2"; USE_BLENDER="true"; shift 2 ;;
         -u|--uv)         GENERATE_UV="true"; USE_BLENDER="true"; shift ;;
-        -p|--params)     SCAD_PARAMS+=("$2"); shift 2 ;;
         --no-blender)    NO_BLENDER="true"; shift ;;
         -h|--help)       usage ;;
         -*)              err "Unknown option: $1" ;;
@@ -63,16 +61,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-[[ -z "$INPUT_FILE" ]] && err "No input .scad file specified. Run with --help for usage."
+[[ -z "$INPUT_FILE" ]] && err "No input file specified. Run with --help for usage."
 [[ ! -f "$INPUT_FILE" ]] && err "File not found: $INPUT_FILE"
-[[ "${INPUT_FILE##*.}" != "scad" ]] && err "Input must be a .scad file"
 
-# Derive base name
-BASENAME="$(basename "$INPUT_FILE" .scad)"
+INPUT_EXT="${INPUT_FILE##*.}"
+BASENAME="$(basename "$INPUT_FILE" ".$INPUT_EXT")"
 mkdir -p "$OUTPUT_DIR"
-
-# Check tools
-command -v openscad >/dev/null 2>&1 || err "OpenSCAD not found. Install: https://openscad.org/downloads.html"
 
 # Determine if Blender is needed
 NEEDS_BLENDER="false"
@@ -90,41 +84,74 @@ if [[ "$NEEDS_BLENDER" == "true" ]]; then
     command -v blender >/dev/null 2>&1 || err "Blender not found. Install: https://www.blender.org/download/ (needed for $FORMAT export / mesh cleanup)"
 fi
 
-# Step 1: OpenSCAD → STL
-log "Step 1: Exporting OpenSCAD → STL"
-
-OPENSCAD_ARGS=(-o "$OUTPUT_DIR/${BASENAME}.stl")
-
-# Add parameter overrides
-for param in "${SCAD_PARAMS[@]+"${SCAD_PARAMS[@]}"}"; do
-    OPENSCAD_ARGS+=(-D "$param")
-done
-
-OPENSCAD_ARGS+=("$INPUT_FILE")
-
-log "  Running: openscad ${OPENSCAD_ARGS[*]}"
-openscad "${OPENSCAD_ARGS[@]}"
-
+# Step 1: Get an STL to work with
 STL_FILE="$OUTPUT_DIR/${BASENAME}.stl"
-[[ ! -f "$STL_FILE" ]] && err "OpenSCAD export failed — no STL produced"
+
+case "$INPUT_EXT" in
+    stl)
+        log "Input is STL — using directly"
+        STL_FILE="$INPUT_FILE"
+        ;;
+    step|stp)
+        log "Input is STEP — converting to STL via Blender"
+        command -v blender >/dev/null 2>&1 || err "Blender not found (needed for STEP import)"
+        # Blender can import STEP natively and export STL
+        blender --background --python-expr "
+import bpy, sys
+bpy.ops.object.select_all(action='SELECT')
+bpy.ops.object.delete()
+bpy.ops.import_scene.x3d(filepath='') if False else None
+bpy.ops.wm.stl_import(filepath='$INPUT_FILE') if hasattr(bpy.ops.wm, 'stl_import') else None
+# For STEP, use the CAD importer add-on or FreeCAD
+" 2>/dev/null || true
+        # Fallback: use python with build123d to convert
+        python -c "
+from build123d import *
+import cadquery as cq
+result = cq.importers.importStep('$INPUT_FILE')
+cq.exporters.export(result, '$STL_FILE')
+print('[export] STEP → STL conversion complete')
+" 2>/dev/null || python -c "
+from OCP.STEPControl import STEPControl_Reader
+from OCP.StlAPI import StlAPI_Writer
+from OCP.BRepMesh import BRepMesh_IncrementalMesh
+reader = STEPControl_Reader()
+reader.ReadFile('$INPUT_FILE')
+reader.TransferRoots()
+shape = reader.OneShape()
+mesh = BRepMesh_IncrementalMesh(shape, 0.1)
+mesh.Perform()
+writer = StlAPI_Writer()
+writer.Write(shape, '$STL_FILE')
+print('[export] STEP → STL conversion complete')
+"
+        [[ ! -f "$STL_FILE" ]] && err "STEP → STL conversion failed"
+        ;;
+    py)
+        log "Input is Python (build123d) — running to generate STL"
+        python "$INPUT_FILE"
+        # The script should output STL to ./output/
+        [[ ! -f "$STL_FILE" ]] && err "Python script did not produce expected STL: $STL_FILE"
+        log "  STL generated: $STL_FILE"
+        ;;
+    *)
+        err "Unsupported input format: .$INPUT_EXT (expected .stl, .step, or .py)"
+        ;;
+esac
 
 STL_SIZE=$(stat -c%s "$STL_FILE" 2>/dev/null || stat -f%z "$STL_FILE" 2>/dev/null)
-log "  Exported: ${BASENAME}.stl ($(numfmt --to=iec "$STL_SIZE" 2>/dev/null || echo "${STL_SIZE} bytes"))"
+log "STL ready: ${BASENAME}.stl ($(numfmt --to=iec "$STL_SIZE" 2>/dev/null || echo "${STL_SIZE} bytes"))"
 
 # If only STL requested, we're done
 if [[ "$FORMAT" == "stl" && "$NEEDS_BLENDER" == "false" ]]; then
-    log "Done! STL ready at: $OUTPUT_DIR/${BASENAME}.stl"
-    log "Import into Godot: drag the .stl into your Godot project's res:// folder"
+    log "Done! STL ready at: $STL_FILE"
     exit 0
 fi
 
-# Step 2 (optional): If OBJ requested without Blender
+# If OBJ requested without Blender, need Blender anyway for conversion
 if [[ "$FORMAT" == "obj" && "$NEEDS_BLENDER" == "false" ]]; then
-    log "Step 2: Exporting OpenSCAD → OBJ directly"
-    openscad -o "$OUTPUT_DIR/${BASENAME}.obj" "${SCAD_PARAMS[@]+"${SCAD_PARAMS[@]/#/-D }"}" "$INPUT_FILE"
-    log "Done! OBJ ready at: $OUTPUT_DIR/${BASENAME}.obj"
-    log "Import into Godot: drag the .obj into your Godot project's res:// folder"
-    exit 0
+    NEEDS_BLENDER="true"
+    command -v blender >/dev/null 2>&1 || err "Blender not found (needed for OBJ conversion)"
 fi
 
 # Step 2: Blender processing
@@ -153,12 +180,12 @@ fi
 log ""
 log "=== Pipeline Complete ==="
 log "  Source:  $INPUT_FILE"
-log "  STL:     $OUTPUT_DIR/${BASENAME}.stl"
+log "  STL:     $STL_FILE"
 if [[ "$NEEDS_BLENDER" == "true" ]]; then
     log "  Output:  $OUTPUT_DIR/${BASENAME}.${FORMAT}"
 fi
 log ""
-log "=== Godot Import Instructions ==="
+log "=== Import Instructions ==="
 case "$FORMAT" in
     glb|gltf)
         log "  1. Copy ${BASENAME}.${FORMAT} into your Godot project's res:// folder"
@@ -169,9 +196,8 @@ case "$FORMAT" in
         log "     add_child(instance)"
         ;;
     stl)
-        log "  1. Copy ${BASENAME}.stl into your Godot project's res:// folder"
-        log "  2. Use the Godot STL import plugin, or convert via Blender first"
-        log "  Tip: Re-run with -f glb for native Godot support"
+        log "  1. Open in slicer (PrusaSlicer, Cura, etc.) for 3D printing"
+        log "  2. Or copy into Godot project — re-run with -f glb for native support"
         ;;
     obj)
         log "  1. Copy ${BASENAME}.obj into your Godot project's res:// folder"
