@@ -2,6 +2,7 @@
 output/*.scad
 output/*.stl
 output/*.json
+output/*.png
 !output/.gitkeep
 node_modules/
 dist/
