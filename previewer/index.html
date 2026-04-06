@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>scad-forge Previewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      overflow: hidden;
+      height: 100vh;
+    }
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 16px;
+      background: #16213e;
+      border-bottom: 1px solid #0f3460;
+      z-index: 10;
+    }
+    #toolbar h1 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e94560;
+      margin-right: auto;
+    }
+    #toolbar label {
+      font-size: 12px;
+      color: #a0a0b0;
+    }
+    #toolbar input[type="file"] {
+      font-size: 12px;
+    }
+    #canvas-container {
+      flex: 1;
+      position: relative;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+    #legend {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(22, 33, 62, 0.9);
+      border: 1px solid #0f3460;
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 12px;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+    #legend h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #a0a0b0;
+      margin-bottom: 6px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+    .legend-label { font-size: 12px; }
+    .legend-diff {
+      font-size: 10px;
+      color: #ff6666;
+      font-style: italic;
+    }
+    #info {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      font-size: 11px;
+      color: #606080;
+    }
+    #drop-overlay {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(233, 69, 96, 0.15);
+      border: 2px dashed #e94560;
+      z-index: 20;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: #e94560;
+    }
+    #drop-overlay.active { display: flex; }
+    #empty-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #606080;
+      font-size: 14px;
+      gap: 8px;
+    }
+    #empty-state .hint { font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="toolbar">
+      <h1>scad-forge</h1>
+      <label>Load manifest:</label>
+      <input type="file" id="file-input" accept=".json" />
+    </div>
+    <div id="canvas-container">
+      <canvas id="viewport"></canvas>
+      <div id="legend"></div>
+      <div id="info">Drag to rotate | Scroll to zoom | Shift+drag to pan</div>
+      <div id="drop-overlay">Drop manifest JSON here</div>
+      <div id="empty-state">
+        <div>No manifest loaded</div>
+        <div class="hint">Use the file picker above or drag & drop a _manifest.json file</div>
+      </div>
+    </div>
+  </div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

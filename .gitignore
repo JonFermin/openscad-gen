@@ -1,0 +1,6 @@
+output/*.scad
+output/*.stl
+output/*.json
+!output/.gitkeep
+node_modules/
+dist/
